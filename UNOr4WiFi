@@ -1,0 +1,61 @@
+/*
+  UnoRelayControl.ino
+  -----------------------------------------
+  - Runs on the Arduino Uno (5 V logic).
+  - Reads the signal from the Nano RP2040 Connect on pin D3.
+  - Drives a 5 V relay on pin D7 (ACTIVE HIGH assumed).
+  - The Uno also powers the RP2040 (and the relay module) at 5 V.
+
+
+  Wiring:
+    - Uno 5V  -> RP2040 5V
+    - Uno GND -> RP2040 GND
+    - Uno 5V  -> Relay VCC
+    - Uno GND -> Relay GND
+    - Uno D7  -> Relay IN
+    - Uno D3  <- RP2040 D2 (3.3 V signal)
+*/
+
+
+int relayPin = 7;    // Relay module input pin on the Uno
+int rp2040Pin = 3;   // RP2040 -> Uno signal pin
+
+
+void setup() {
+  Serial.begin(9600);
+
+
+  // Relay pin as OUTPUT, start OFF
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW); // if active HIGH, this is "off" at startup
+
+
+  // RP2040 signal as INPUT
+  pinMode(rp2040Pin, INPUT);
+  // If the signal sometimes floats, add a 10k resistor from rp2040Pin to GND (external pull-down),
+  // or do pinMode(rp2040Pin, INPUT_PULLUP) and invert logic if needed.
+
+
+  Serial.println("Uno Relay Controller Starting...");
+}
+
+
+void loop() {
+  // Read the signal from the RP2040
+  int signalVal = digitalRead(rp2040Pin);
+
+
+  // If the signal is HIGH, turn the relay ON
+  if (signalVal == HIGH) {
+    // Relay ON (active HIGH)
+    digitalWrite(relayPin, HIGH);
+    Serial.println("Signal=HIGH -> Relay ON");
+  } else {
+    // Relay OFF
+    digitalWrite(relayPin, LOW);
+    Serial.println("Signal=LOW  -> Relay OFF");
+  }
+
+
+  delay(500); // simple polling
+}
