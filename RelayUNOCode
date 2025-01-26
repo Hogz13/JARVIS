@@ -1,0 +1,15 @@
+const int relayPin = 7;    // Relay module input pin on the Uno
+
+void setup()
+{
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW); // Relay OFF at startup
+  Serial.begin(9600);
+  Serial.println("Relay Uno Starting...");
+}
+
+void loop()
+{
+  // Relay control is handled by the Nano RP2040 Connect setting D7 HIGH or LOW
+  // No additional code needed here
+}
