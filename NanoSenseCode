@@ -1,0 +1,122 @@
+/*
+  GestureBLEServer.ino
+  --------------------------------
+  - Runs on the Arduino Nano 33 BLE Sense.
+  - Reads gesture data from the on-board APDS-9960.
+  - Advertises a BLE service and characteristic:
+      Service UUID:        19B10000-E8F2-537E-4F6C-D104768A1214
+      Characteristic UUID: 19B10001-E8F2-537E-4F6C-D104768A1214
+  - Sends gesture values (0=NONE,1=UP,2=DOWN,3=LEFT,4=RIGHT)
+    via BLE notifications to a central device.
+
+
+  IMPORTANT CHANGE:
+    - Removed "while (!Serial);" so the code won't block when
+      there is no USB serial connection.
+*/
+
+
+#include <Arduino_APDS9960.h>
+#include <ArduinoBLE.h>
+
+
+// Use the same UUIDs as your Central code expects
+#define GESTURE_SERVICE_UUID         "19B10000-E8F2-537E-4F6C-D104768A1214"
+#define GESTURE_CHARACTERISTIC_UUID  "19B10001-E8F2-537E-4F6C-D104768A1214"
+
+
+// Create a BLE service
+BLEService gestureService(GESTURE_SERVICE_UUID);
+
+
+// Create a byte characteristic with read + notify permissions
+BLEByteCharacteristic gestureCharacteristic(GESTURE_CHARACTERISTIC_UUID,
+                                            BLERead | BLENotify);
+
+
+void setup() {
+  Serial.begin(9600);
+
+
+  // ***** Comment out the blocking line *****
+  // while (!Serial); // REMOVE or COMMENT this line
+
+
+  // Initialize APDS-9960
+  if (!APDS.begin()) {
+    Serial.println("Error initializing APDS-9960!");
+  } else {
+    Serial.println("APDS-9960 initialized.");
+  }
+
+
+  // Initialize BLE
+  if (!BLE.begin()) {
+    Serial.println("Starting BLE failed!");
+    while (1);  // Still do an infinite loop if BLE init fails
+  }
+  Serial.println("BLE initialized.");
+
+
+  // Set BLE device name and advertise
+  BLE.setLocalName("GestureServer");
+  BLE.setAdvertisedService(gestureService);
+
+
+  // Add characteristic(s) to our service
+  gestureService.addCharacteristic(gestureCharacteristic);
+
+
+  // Add the service
+  BLE.addService(gestureService);
+
+
+  // Start advertising
+  BLE.advertise();
+  Serial.println("BLE GestureServer is now advertising...");
+}
+
+
+void loop() {
+  // Keep BLE alive
+  BLE.poll();
+
+
+  // Check for any new gesture
+  if (APDS.gestureAvailable()) {
+    int gesture = APDS.readGesture();
+
+
+    switch (gesture) {
+      case GESTURE_UP:
+        Serial.println("Detected UP gesture");
+        gestureCharacteristic.writeValue((byte)1);
+        break;
+
+
+      case GESTURE_DOWN:
+        Serial.println("Detected DOWN gesture");
+        gestureCharacteristic.writeValue((byte)2);
+        break;
+
+
+      case GESTURE_LEFT:
+        Serial.println("Detected LEFT gesture");
+        gestureCharacteristic.writeValue((byte)3);
+        break;
+
+
+      case GESTURE_RIGHT:
+        Serial.println("Detected RIGHT gesture");
+        gestureCharacteristic.writeValue((byte)4);
+        break;
+
+
+      default:
+        // Unknown or no gesture
+        Serial.println("Unknown/no gesture");
+        gestureCharacteristic.writeValue((byte)0);
+        break;
+    }
+  }
+}
