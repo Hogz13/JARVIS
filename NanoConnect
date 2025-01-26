@@ -1,0 +1,174 @@
+/*
+  GestureCentralRP2040.ino
+  -----------------------------------------
+  - Runs on the Arduino Nano RP2040 Connect.
+  - Scans for "GestureServer" (Nano 33 BLE Sense).
+  - Connects, subscribes to gesture characteristic.
+  - When gesture is received:
+      1 (UP)    => Relay ON
+      2 (DOWN)  => Relay OFF
+      3 (LEFT)  => Toggle Servo Direction
+      4 (RIGHT) => Toggle Servo Direction
+  - "signalRelayPin" is connected to Relay Uno's D7.
+  - "signalServoPin" is connected to Servo Uno's D3.
+*/
+
+
+#include <ArduinoBLE.h>
+
+
+// Must match the Peripheral (Nano 33 BLE Sense) Service/Char UUIDs
+#define GESTURE_SERVICE_UUID         "19B10000-E8F2-537E-4F6C-D104768A1214"
+#define GESTURE_CHARACTERISTIC_UUID  "19B10001-E8F2-537E-4F6C-D104768A1214"
+
+
+// Define signal pins
+const int signalRelayPin = 2; // RP2040 Connect's D2 connected to Relay Uno's D7
+const int signalServoPin = 3; // RP2040 Connect's D3 connected to Servo Uno's D3
+
+
+BLECharacteristic gestureChar;
+
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Set up the signal pins for output
+  pinMode(signalRelayPin, OUTPUT);
+  pinMode(signalServoPin, OUTPUT);
+  digitalWrite(signalRelayPin, LOW); // Relay OFF at startup
+  digitalWrite(signalServoPin, LOW); // Initialize Servo signal to LOW
+
+
+  // Initialize BLE in central mode
+  if (!BLE.begin()) {
+    Serial.println("Failed to initialize BLE!");
+    while (1); // Halt if BLE initialization fails
+  }
+  Serial.println("BLE initialized. Scanning for devices...");
+
+
+  // Start scanning
+  BLE.scan();
+}
+
+
+void loop() {
+  // If connected, just poll BLE
+  if (BLE.connected()) {
+    BLE.poll();
+    return;
+  }
+
+
+  // If not connected, keep scanning for available devices
+  BLEDevice peripheral = BLE.available();
+  if (peripheral) {
+    // Check if it's our "GestureServer"
+    if (peripheral.localName() == "GestureServer") {
+      Serial.print("Found ");
+      Serial.println(peripheral.localName());
+      BLE.stopScan();
+
+
+      // Attempt to connect
+      if (connectToPeripheral(peripheral)) {
+        Serial.println("Connected to GestureServer!");
+      } else {
+        Serial.println("Failed to connect or discover attributes.");
+        peripheral.disconnect();
+        BLE.scan();
+      }
+    }
+  }
+}
+
+
+bool connectToPeripheral(BLEDevice peripheral) {
+  Serial.print("Connecting... ");
+  if (!peripheral.connect()) {
+    Serial.println("FAILED");
+    return false;
+  }
+  Serial.println("DONE");
+
+
+  Serial.print("Discovering attributes... ");
+  if (!peripheral.discoverAttributes()) {
+    Serial.println("FAILED");
+    return false;
+  }
+  Serial.println("DONE");
+
+
+  // Retrieve the service
+  BLEService gestureService = peripheral.service(GESTURE_SERVICE_UUID);
+  if (!gestureService) {
+    Serial.println("ERROR: Gesture Service not found!");
+    return false;
+  }
+
+
+  // Retrieve the characteristic
+  gestureChar = gestureService.characteristic(GESTURE_CHARACTERISTIC_UUID);
+  if (!gestureChar) {
+    Serial.println("ERROR: Gesture Characteristic not found!");
+    return false;
+  }
+
+
+  // Subscribe to notifications
+  if (gestureChar.canSubscribe()) {
+    if (!gestureChar.subscribe()) {
+      Serial.println("ERROR: Subscribing failed!");
+      return false;
+    }
+    gestureChar.setEventHandler(BLEUpdated, onGestureValueUpdate);
+  } else {
+    Serial.println("ERROR: Gesture char doesn't support notifications.");
+    return false;
+  }
+
+
+  return true;
+}
+
+
+// Called whenever the Nano 33 BLE Sense sends a new gesture value
+void onGestureValueUpdate(BLEDevice peripheral, BLECharacteristic characteristic) {
+  if (!characteristic.valueLength()) {
+    return;
+  }
+
+
+  // The Sense sends 1 byte: 0=NONE,1=UP,2=DOWN,3=LEFT,4=RIGHT
+  byte gestureValue = characteristic.value()[0];
+  switch (gestureValue) {
+    case 1: // UP => Relay ON
+      Serial.println("Gesture: UP -> Relay ON");
+      digitalWrite(signalRelayPin, HIGH); // Relay ON
+      break;
+
+
+    case 2: // DOWN => Relay OFF
+      Serial.println("Gesture: DOWN -> Relay OFF");
+      digitalWrite(signalRelayPin, LOW);  // Relay OFF
+      break;
+
+
+    case 3: // LEFT => Toggle Servo Direction
+    case 4: // RIGHT => Toggle Servo Direction
+      Serial.print("Gesture: ");
+      Serial.print((gestureValue == 3) ? "LEFT" : "RIGHT");
+      Serial.println(" -> Toggle Servo Direction");
+      digitalWrite(signalServoPin, HIGH); // Send toggle signal
+      delay(100); // Short pulse
+      digitalWrite(signalServoPin, LOW);  // Reset signal
+      break;
+
+
+    default:
+      Serial.println("Gesture: NONE/UNKNOWN");
+      break;
+  }
+}
