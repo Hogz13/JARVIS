@@ -1,0 +1,65 @@
+/*
+  ServoControlUnoR3.ino
+  -----------------------------------------
+  - Runs on the Arduino Uno R3 (Servo Uno).
+  - Controls a servo motor by toggling its direction based on signals from the Nano RP2040 Connect.
+  - Wiring:
+      - Servo Signal: Uno R3 D2
+      - Signal Input: Uno R3 D3 (connected to RP2040 Connect D3)
+      - 5V and GND connected to servo
+*/
+
+
+#include <Servo.h>
+
+
+Servo servo_2;
+
+
+const int servoPin = 2;    // Servo signal connected to Uno R3 D2
+const int signalPin = 3;   // Signal input connected to RP2040 Connect D3
+
+
+bool isRight = false;      // Current direction: false = Left, true = Right
+bool lastSignalState = LOW; // To detect rising edge
+
+
+void setup()
+{
+  // Attach the servo to pin 2 with min and max pulse widths
+  servo_2.attach(servoPin, 500, 2500);
+  
+  // Initialize the signal pin as input
+  pinMode(signalPin, INPUT_PULLUP); // Use internal pull-up resistor
+  
+  // Start servo at neutral position
+  servo_2.write(90);
+  
+  Serial.begin(9600);
+  Serial.println("Servo Uno Starting...");
+}
+
+
+void loop()
+{
+  // Read the current state of the signal pin
+  bool currentSignalState = digitalRead(signalPin);
+  
+  // Detect a rising edge: LOW -> HIGH
+  if (currentSignalState == HIGH && lastSignalState == LOW) {
+    // Toggle the servo direction
+    isRight = !isRight;
+    if (isRight) {
+      Serial.println("Toggle: Servo RIGHT");
+      servo_2.write(180); // Rotate servo to RIGHT
+    }
+    else {
+      Serial.println("Toggle: Servo LEFT");
+      servo_2.write(0);   // Rotate servo to LEFT
+    }
+    delay(200); // Debounce delay
+  }
+  
+  // Update the last signal state
+  lastSignalState = currentSignalState;
+}
